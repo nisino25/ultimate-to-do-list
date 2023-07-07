@@ -8,6 +8,7 @@
     "lint": "vue-cli-service lint"
   },
   "dependencies": {
+    "aws-sdk": "^2.1410.0",
     "core-js": "^3.8.3",
     "papaparse": "^5.4.1",
     "sortablejs": "^1.15.0",

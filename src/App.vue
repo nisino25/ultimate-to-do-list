@@ -1,12 +1,21 @@
 <template>
+
   <div style="display: flex; margin:auto; justify-content: space-around;">
     <div>
-      <h1>To-do-list: [{{baseData.length - uniqueStatuses.length}}]</h1>
+      <h1 @click="retrieveData()">To-do-list: [{{baseData.length - uniqueStatuses.length}}]</h1>
       <!-- <h2>{{uniqueStatuses}}</h2> -->
     </div>
     <div>
-      <ul id="完了" style="display: block; background: red; width:200px; aspect-ratio: 3/1; position:relative; padding:0">
-        <strong style="position: absolute;top: 50%;left: 50%;transform: translate(-50%, -50%);">完了:[{{filteredData[6]?.length-1}}]</strong>
+      <ul id="完了" style="display: block; background: black; width:200px; aspect-ratio: 3/1; position:relative; padding:0; cursor:pointer" @click="sendBaseData()">
+        
+        <div v-if="isShowingDoneList">
+          <template v-for="(element, i) in doneList" :key="i">
+            <li v-if="!element.hidden && i <5">
+              {{ element.title }}<br>
+            </li>
+          </template>
+        </div>
+        <strong v-else style="position: absolute;top: 50%;left: 50%;transform: translate(-50%, -50%);">完了:[{{filteredData[6]?.length-1}}]</strong>
       </ul>
     </div>
 
@@ -38,11 +47,25 @@
               @dragstart="startFunction(element)"
               @dragend="endFunction($event, element)"
               :style="{ background: priorityColors[element.priority - 1] }"
+              @click="incrementPriority(element)"
 
             >
-              {{ element.title }}<br>
+            <section style="display:flex;display: grid; grid-template-columns: 75% 15%;justify-content:space-around">
+              <div>
+                {{ element.title }}<br>
               <!-- <span style="color:black; font-weight:bold">{{element.priority}}</span> -->
-              <span v-for="n in element.priority" :key="n">&#11088;</span> <!-- Here's the star part -->
+                <span v-for="n in element.priority" :key="n">&#11088;</span> <!-- Here's the star part -->
+              </div>
+              <div>
+                <div class="wrapper" style="position:relative; display:block; width:100%;aspect-ratio:1/1;background:#282c34; font-size:12px; border-radius:100%;" v-if="element.duration">
+                  <strong style="position: absolute;top: 50%;left: 50%;transform: translate(-50%, -50%);white-space: nowrap;">{{element.duration}}</strong>
+
+                </div>
+              </div>
+
+            </section>
+              
+              <br>
             </li>
           </template>
         </draggable>
@@ -61,6 +84,8 @@
 
 <script>
 import draggable from 'vuedraggable'
+
+import {  getTodoItems,putBaseData,getAllItems,updateElement } from './dynamodb';
 // import Sortable from 'sortablejs'
 
 export default {
@@ -1331,6 +1356,8 @@ export default {
 
       droppedUlId: null,
       isDragging: false,
+
+      isShowingDoneList: false,
       
       statusColors:["rgb(55, 55, 55)","rgb(110, 54, 48)","rgb(40, 69, 108)","#646464","rgb(137, 99, 42)","rgb(55, 55, 55)","rgb(43, 89, 63)",],
       // priorityColors:["#3b633b", "#616e20", "#8b8200", "#8b5400", "#8b0000"],
@@ -1414,10 +1441,77 @@ export default {
       console.log(`Item moved from index ${event.moved.oldIndex} in list ${event.moved.from} to index ${event.moved.newIndex} in list ${event.moved.to}`);
     },
 
+    toggleDoneList(){
+      // console.table(this.doneList);
+      this.isShowingDoneList = !this.isShowingDoneList
+    },
+
     test(info){
       this.currentTarget= info
       // console.log(info);
+    },
+
+
+
+    async loadItems() {
+      try {
+        const items = await getTodoItems(); // get from DynamoDB
+        console.log(items);
+        // this.baseData = items
+        // console.table(this.baseData);
+        this.todoList = items; // update local list
+      } catch (err) {
+        console.error(err);
+      }
+    },
+
+    async retrieveData() {
+      console.log(`here`);
+      try {
+        // Call the API function to retrieve all items
+        this.items = await getAllItems();
+        this.baseData = this.items
+      } catch (error) {
+        console.error(error);
+        alert('Failed to retrieve items.');
+      }
+    },
+    // async sendBaseData() {
+    //   try {
+    //     await putBaseData(this.baseData); // send baseData to DynamoDB
+    //   } catch (err) {
+    //     console.error(err);
+    //   }
+    // },
+    async sendBaseData() {
+      try {
+        const slicedData = this.baseData.slice(150, 200); // Slice the first 10 elements
+        console.table(slicedData)
+        await putBaseData(slicedData); // send slicedData to DynamoDB
+      } catch (err) {
+        console.error(err);
+      }
+    },
+
+    increment(element){
+      console.log(element)
+      element.priority++
+    },
+
+    async incrementPriority(element) {
+      element.priority++;
+
+      // Update the element in DynamoDB
+      console.log(element);
+      if(element == 1000000) updateElement()
+      // try {
+      //   await updateElement(element);
+      //   console.log('Element updated successfully in DynamoDB.');
+      // } catch (error) {
+      //   console.error('Failed to update element in DynamoDB:', error);
+      // }
     }
+
   },
   computed:{
     uniqueStatuses() {
@@ -1475,6 +1569,25 @@ export default {
       };
     },
 
+    doneList(){
+      // console.table(this.filteredData)
+      let array = this.filteredData[6]
+      array.sort((a, b) => {
+        if (a.completedAt !== undefined && b.completedAt !== undefined) {
+          return b.completedAt - a.completedAt; // Sort in descending order
+        }
+        if (a.completedAt === undefined && b.completedAt !== undefined) {
+          return 1;
+        }
+        if (a.completedAt !== undefined && b.completedAt === undefined) {
+          return -1;
+        }
+        return 0;
+      });
+      return array
+      // return this.filteredData[6]
+    },
+
 
 
   },
@@ -1492,6 +1605,25 @@ export default {
         hidden: true
       });
     });
+
+    this.baseData.forEach((item, index) => {
+      // Add a unique ID to each item
+      // index
+      item.id = (index + 1).toString();
+      // if (item.priority === "") {
+      //   item.priority = 0;
+      // }
+      //  if (item.duration === "") {
+      //   item.duration = 0;
+      // }
+
+    });
+    
+
+    // this.baseData = []
+
+
+
   
 
   }
@@ -1548,7 +1680,7 @@ html{
     position: relative; 
     /* border: 2px solid #FF5733; */
     background: #5b5f6f;
-    padding: 15px;
+    padding: 15px 10px;
     margin: 10px auto;
     border-radius: 5px;
     word-break: break-all;
